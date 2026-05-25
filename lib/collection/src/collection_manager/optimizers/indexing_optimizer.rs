@@ -761,10 +761,9 @@ mod tests {
     ///   This appendable segment is not size-checked during the move, so its
     ///   resulting size can exceed the configured `max_segment_size`.
     ///
-    /// This test currently fails by design (the bug is not yet fixed).
-    /// Marked `#[ignore]` so CI stays green; remove the attribute once the
-    /// underlying issue is addressed.
-    #[ignore = "Reproduction for unfixed segment overgrow bug; see PR description"]
+    /// This test currently FAILS by design: it is a reproduction for the
+    /// unfixed segment overgrow bug. It will pass once the underlying issue
+    /// is addressed.
     #[test]
     fn test_set_payload_by_filter_does_not_overgrow_segment() {
         init();
