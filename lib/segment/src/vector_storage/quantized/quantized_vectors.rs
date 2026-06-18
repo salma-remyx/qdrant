@@ -55,6 +55,11 @@ pub struct QuantizedVectors {
     path: PathBuf,
     distance: Distance,
     datatype: VectorStorageDatatype,
+    /// Whether queries must be rotated into TurboQuant's rotated space before
+    /// scoring. Set when this quantization was built straight from a Turbo
+    /// source storage keeping its vectors rotated (every metric but Manhattan);
+    /// see `QuantizedVectors::create`.
+    rotate_query: bool,
 }
 
 impl QuantizedVectors {
@@ -67,6 +72,7 @@ impl QuantizedVectors {
         query: QueryVector,
         hardware_counter: HardwareCounterCell,
     ) -> OperationResult<Box<dyn RawScorer + 'a>> {
+        let query = maybe_rotate_query(query, self.rotate_query)?;
         build_quantized_raw_scorer(
             &self.storage_impl,
             &self.config.quantization_config,
@@ -307,6 +313,52 @@ impl QuantizedVectorsRead for QuantizedVectors {
     ) -> Result<Box<dyn RawScorer + 'a>, InternalScorerUnsupported> {
         self.raw_internal_scorer(point_id, hardware_counter)
     }
+}
+
+pub(in crate::vector_storage::quantized) fn turbo_source_scoring(
+    source_datatype: VectorStorageDatatype,
+    distance: Distance,
+) -> (VectorStorageDatatype, bool) {
+    if source_datatype == VectorStorageDatatype::Turbo4 {
+        (
+            VectorStorageDatatype::Float32,
+            distance != Distance::Manhattan,
+        )
+    } else {
+        (source_datatype, false)
+    }
+}
+
+fn maybe_rotate_query(query: QueryVector, rotate_query: bool) -> OperationResult<QueryVector> {
+    use crate::data_types::vectors::VectorInternal;
+    use crate::vector_storage::query::TransformInto;
+
+    if !rotate_query {
+        return Ok(query);
+    }
+
+    query.transform(|vector| {
+        Ok(match vector {
+            VectorInternal::Dense(dense) => VectorInternal::Dense(rotate_dense(dense)),
+            VectorInternal::MultiDense(mut multi) => {
+                for inner in multi.multi_vectors_mut() {
+                    let rotated = rotate_dense(inner.to_vec());
+                    inner.copy_from_slice(&rotated);
+                }
+                VectorInternal::MultiDense(multi)
+            }
+            // Sparse vectors are never paired with dense quantization.
+            other @ VectorInternal::Sparse(_) => other,
+        })
+    })
+}
+
+fn rotate_dense(
+    vector: crate::data_types::vectors::DenseVector,
+) -> crate::data_types::vectors::DenseVector {
+    let mut buf: Vec<f64> = vector.iter().map(|&x| f64::from(x)).collect();
+    quantization::turboquant::rotation::random_vector_rotation(&mut buf);
+    buf.into_iter().map(|x| x as f32).collect()
 }
 
 impl crate::common::memory_usage::MemoryReporter for QuantizedVectors {

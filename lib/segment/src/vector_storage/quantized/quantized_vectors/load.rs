@@ -9,7 +9,7 @@ use quantization::encoded_vectors_u8::EncodedVectorsU8;
 
 use super::{
     QuantizedStorageKind, QuantizedVectorStorage, QuantizedVectors, QuantizedVectorsConfig,
-    QuantizedVectorsStorageType, READ_FS, ReadFile,
+    QuantizedVectorsStorageType, READ_FS, ReadFile, turbo_source_scoring,
 };
 use crate::common::operation_error::OperationResult;
 use crate::types::{MultiVectorConfig, QuantizationConfig};
@@ -79,13 +79,14 @@ impl QuantizedVectors {
         };
 
         let distance = vector_storage.distance();
-        let datatype = vector_storage.datatype();
+        let (datatype, rotate_query) = turbo_source_scoring(vector_storage.datatype(), distance);
         Ok(QuantizedVectors {
             storage_impl: quantized_store,
             config,
             path: path.to_path_buf(),
             distance,
             datatype,
+            rotate_query,
         })
     }
 
