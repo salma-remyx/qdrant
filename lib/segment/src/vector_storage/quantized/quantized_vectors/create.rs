@@ -616,10 +616,12 @@ mod tests {
     use tempfile::Builder;
 
     use super::*;
-    use crate::data_types::vectors::{DenseVector, QueryVector};
-    use crate::data_types::vectors::{MultiDenseVectorInternal, TypedMultiDenseVectorRef};
-    use crate::types::MultiVectorConfig;
-    use crate::types::{ScalarQuantization, ScalarQuantizationConfig, ScalarType};
+    use crate::data_types::vectors::{
+        DenseVector, MultiDenseVectorInternal, QueryVector, TypedMultiDenseVectorRef,
+    };
+    use crate::types::{
+        MultiVectorConfig, ScalarQuantization, ScalarQuantizationConfig, ScalarType,
+    };
     use crate::vector_storage::VectorStorage;
     use crate::vector_storage::turbo::multi::open_appendable_turbo_multi_vector_storage;
     use crate::vector_storage::turbo::open_appendable_turbo_vector_storage;
