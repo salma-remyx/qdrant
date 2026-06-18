@@ -596,6 +596,8 @@ impl QuantizedVectors {
 
 /// Running multivector offset accumulator for `Iterator::scan`: emits the start
 /// offset for each multivector and advances by its inner-vector count.
+// `scan` requires the callback to return `Option`, so the wrap is mandatory here.
+#[allow(clippy::unnecessary_wraps)]
 fn accumulate_offset(
     offset_acc: &mut PointOffsetType,
     multi_vector_len: PointOffsetType,
