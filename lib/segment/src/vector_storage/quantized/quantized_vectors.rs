@@ -320,7 +320,9 @@ impl QuantizedVectorsRead for QuantizedVectors {
     }
 }
 
-pub(in crate::vector_storage::quantized) fn turbo_source_scoring(
+/// Resolve the datatype to score in and whether queries must be rotated into
+/// TurboQuant's rotated space before scoring.
+pub fn is_query_rotation_required(
     source_datatype: VectorStorageDatatype,
     distance: Distance,
 ) -> (VectorStorageDatatype, bool) {

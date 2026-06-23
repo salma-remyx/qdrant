@@ -48,7 +48,7 @@ impl<S: UniversalRead> ReadOnlyQuantizedVectors<S> {
         distance: Distance,
         source_datatype: VectorStorageDatatype,
     ) -> Self {
-        let (datatype, rotate_query) = super::turbo_source_scoring(source_datatype, distance);
+        let (datatype, rotate_query) = super::is_query_rotation_required(source_datatype, distance);
         Self {
             storage_impl,
             config,

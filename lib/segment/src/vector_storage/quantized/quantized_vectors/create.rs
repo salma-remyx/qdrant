@@ -7,7 +7,7 @@ use common::types::PointOffsetType;
 
 use super::{
     QUANTIZED_CONFIG_PATH, QuantizedVectors, QuantizedVectorsConfig, QuantizedVectorsStorageType,
-    turbo_source_scoring,
+    is_query_rotation_required,
 };
 use crate::common::operation_error::{OperationError, OperationResult};
 use crate::data_types::primitive::PrimitiveVectorElement;
@@ -265,7 +265,8 @@ impl QuantizedVectors {
         let distance = vector_storage.distance();
         let on_disk_vector_storage = vector_storage.is_on_disk();
 
-        let (datatype, rotate_query) = turbo_source_scoring(vector_storage.datatype(), distance);
+        let (datatype, rotate_query) =
+            is_query_rotation_required(vector_storage.datatype(), distance);
         // `rotate_query` is exactly "rotation preserves this metric", i.e. the
         // vectors are kept rotated and queries are rotated to match.
         let keep_rotated = rotate_query;
@@ -449,7 +450,8 @@ impl QuantizedVectors {
         let vectors_count = vector_storage.total_vector_count();
         let on_disk_vector_storage = vector_storage.is_on_disk();
 
-        let (datatype, rotate_query) = turbo_source_scoring(vector_storage.datatype(), distance);
+        let (datatype, rotate_query) =
+            is_query_rotation_required(vector_storage.datatype(), distance);
         let keep_rotated = rotate_query;
 
         let vectors = (0..vectors_count as PointOffsetType).flat_map(move |key| {
