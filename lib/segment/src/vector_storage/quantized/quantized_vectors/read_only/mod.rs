@@ -84,7 +84,11 @@ impl<S: UniversalRead> ReadOnlyQuantizedVectors<S> {
         query: QueryVector,
         hardware_counter: HardwareCounterCell,
     ) -> OperationResult<Box<dyn RawScorer + 'a>> {
-        let query = super::maybe_rotate_query(query, self.rotate_query)?;
+        let query = if self.rotate_query {
+            super::rotate_query(query)?
+        } else {
+            query
+        };
         build_quantized_raw_scorer(
             &self.storage_impl,
             &self.config.quantization_config,

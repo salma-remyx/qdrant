@@ -36,7 +36,7 @@ pub use self::read_access::QuantizedVectorsRead;
 pub use self::read_only::{ReadOnlyQuantizedVectorStorage, ReadOnlyQuantizedVectors};
 pub use self::storage::QuantizedVectorStorage;
 use crate::common::operation_error::OperationResult;
-use crate::data_types::vectors::QueryVector;
+use crate::data_types::vectors::{QueryVector, VectorInternal};
 use crate::types::{
     BinaryQuantization, BinaryQuantizationEncoding, BinaryQuantizationQueryEncoding,
     CompressionRatio, Distance, ProductQuantization, QuantizationConfig, ScalarType,
@@ -47,6 +47,7 @@ use crate::vector_storage::quantized::quantized_query_scorer::InternalScorerUnsu
 use crate::vector_storage::quantized::quantized_scorer_builder::{
     QuantizedScorerDispatch, build_quantized_raw_scorer,
 };
+use crate::vector_storage::query::TransformInto;
 
 #[derive(Debug)]
 pub struct QuantizedVectors {
@@ -72,7 +73,11 @@ impl QuantizedVectors {
         query: QueryVector,
         hardware_counter: HardwareCounterCell,
     ) -> OperationResult<Box<dyn RawScorer + 'a>> {
-        let query = maybe_rotate_query(query, self.rotate_query)?;
+        let query = if self.rotate_query {
+            rotate_query(query)?
+        } else {
+            query
+        };
         build_quantized_raw_scorer(
             &self.storage_impl,
             &self.config.quantization_config,
@@ -329,21 +334,27 @@ pub(in crate::vector_storage::quantized) fn turbo_source_scoring(
     }
 }
 
-fn maybe_rotate_query(query: QueryVector, rotate_query: bool) -> OperationResult<QueryVector> {
-    use crate::data_types::vectors::VectorInternal;
-    use crate::vector_storage::query::TransformInto;
-
-    if !rotate_query {
-        return Ok(query);
-    }
-
+fn rotate_query(query: QueryVector) -> OperationResult<QueryVector> {
     query.transform(|vector| {
         Ok(match vector {
-            VectorInternal::Dense(dense) => VectorInternal::Dense(rotate_dense(dense)),
+            VectorInternal::Dense(dense) => {
+                let mut buf: Vec<f64> = dense.iter().map(|&x| f64::from(x)).collect();
+                quantization::turboquant::rotation::random_vector_rotation(&mut buf);
+                VectorInternal::Dense(buf.into_iter().map(|x| x as f32).collect())
+            }
             VectorInternal::MultiDense(mut multi) => {
+                // `random_vector_rotation` operates in place on `f64`, so each row
+                // is copied into this scratch buffer, rotated, and copied back.
+                // The buffer is reused across rows to keep the whole multivector
+                // rotation down to a single allocation.
+                let mut buf: Vec<f64> = Vec::new();
                 for inner in multi.multi_vectors_mut() {
-                    let rotated = rotate_dense(inner.to_vec());
-                    inner.copy_from_slice(&rotated);
+                    buf.clear();
+                    buf.extend(inner.iter().map(|&x| f64::from(x)));
+                    quantization::turboquant::rotation::random_vector_rotation(&mut buf);
+                    for (dst, &src) in inner.iter_mut().zip(buf.iter()) {
+                        *dst = src as f32;
+                    }
                 }
                 VectorInternal::MultiDense(multi)
             }
@@ -351,14 +362,6 @@ fn maybe_rotate_query(query: QueryVector, rotate_query: bool) -> OperationResult
             other @ VectorInternal::Sparse(_) => other,
         })
     })
-}
-
-fn rotate_dense(
-    vector: crate::data_types::vectors::DenseVector,
-) -> crate::data_types::vectors::DenseVector {
-    let mut buf: Vec<f64> = vector.iter().map(|&x| f64::from(x)).collect();
-    quantization::turboquant::rotation::random_vector_rotation(&mut buf);
-    buf.into_iter().map(|x| x as f32).collect()
 }
 
 impl crate::common::memory_usage::MemoryReporter for QuantizedVectors {
