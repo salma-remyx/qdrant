@@ -45,13 +45,12 @@ where
 {
     match data_type {
         VectorStorageDatatype::Float32 => unreachable!(),
-        VectorStorageDatatype::Float16 => {
+        VectorStorageDatatype::Float16 | VectorStorageDatatype::Turbo4 => {
             let mut vector = segment::fixtures::payload_fixtures::random_vector(rnd_gen, dim);
             vector.iter_mut().for_each(|x| *x -= 0.5);
             vector
         }
         VectorStorageDatatype::Uint8 => random_dense_byte_vector(rnd_gen, dim),
-        VectorStorageDatatype::Turbo4 => unreachable!(),
     }
 }
 
@@ -193,6 +192,45 @@ fn sames_count(a: &[Vec<ScoredPointOffset>], b: &[Vec<ScoredPointOffset>]) -> us
     32, // ef
     70., // min_acc out of 100
 )]
+// Turbo (TQ) storage with quantization on top. Dot/Cosine/Euclid keep the source
+// vectors rotated and rotate the query to match, while Manhattan rotates back; both
+// branches must still rank correctly.
+#[case::nearest_scalar_turbo_dot(
+    QueryVariant::Nearest,
+    VectorStorageDatatype::Turbo4,
+    QuantizationVariant::Scalar,
+    Distance::Dot,
+    32, // dim
+    32, // ef
+    70., // min_acc out of 100
+)]
+#[case::nearest_scalar_turbo_cosine(
+    QueryVariant::Nearest,
+    VectorStorageDatatype::Turbo4,
+    QuantizationVariant::Scalar,
+    Distance::Cosine,
+    32, // dim
+    32, // ef
+    70., // min_acc out of 100
+)]
+#[case::nearest_scalar_turbo_euclid(
+    QueryVariant::Nearest,
+    VectorStorageDatatype::Turbo4,
+    QuantizationVariant::Scalar,
+    Distance::Euclid,
+    32, // dim
+    32, // ef
+    70., // min_acc out of 100
+)]
+#[case::nearest_scalar_turbo_manhattan(
+    QueryVariant::Nearest,
+    VectorStorageDatatype::Turbo4,
+    QuantizationVariant::Scalar,
+    Distance::Manhattan,
+    32, // dim
+    32, // ef
+    70., // min_acc out of 100
+)]
 fn test_byte_storage_binary_quantization_hnsw(
     #[case] query_variant: QueryVariant,
     #[case] storage_data_type: VectorStorageDatatype,
@@ -241,17 +279,22 @@ fn test_byte_storage_binary_quantization_hnsw(
     let int_key = "int";
 
     let (mut segment_byte, _) = build_segment(dir_byte.path(), &config_byte, None, true).unwrap();
-    // check that `segment_byte` uses byte or half storage
+    // check that `segment_byte` uses the storage backend selected by the datatype
     {
         let borrowed_storage = segment_byte.vector_data[DEFAULT_VECTOR_NAME]
             .vector_storage
             .borrow();
         let raw_storage: &VectorStorageEnum = &borrowed_storage;
-        assert_matches!(
-            raw_storage,
-            &VectorStorageEnum::DenseAppendableMemmapByte(_)
-                | &VectorStorageEnum::DenseAppendableMemmapHalf(_),
-        );
+        match storage_data_type {
+            VectorStorageDatatype::Turbo4 => {
+                assert_matches!(raw_storage, &VectorStorageEnum::DenseTurbo(_));
+            }
+            _ => assert_matches!(
+                raw_storage,
+                &VectorStorageEnum::DenseAppendableMemmapByte(_)
+                    | &VectorStorageEnum::DenseAppendableMemmapHalf(_),
+            ),
+        }
     }
 
     let hw_counter = HardwareCounterCell::new();
