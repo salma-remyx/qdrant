@@ -3769,6 +3769,7 @@ dependencies = [
  "bytes",
  "common",
  "futures",
+ "log",
  "object_store",
  "slab",
  "tempfile",

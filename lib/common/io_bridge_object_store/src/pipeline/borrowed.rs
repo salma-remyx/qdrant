@@ -47,6 +47,11 @@ where
             let (tx, rx) = PipelineInner::<U>::default_channel();
             PipelineInner::new(tx, rx)
         });
+        log::warn!(
+            "schedule read for {user_data:?} of {} range {:?}",
+            file.path.display(),
+            range
+        );
         let future = read_into_byte_buffer::<A>(file, range, align);
         inner.schedule(&file.runtime, user_data, future)
     }
@@ -55,6 +60,18 @@ where
         let Some(inner) = self.inner.as_mut() else {
             return Ok(None);
         };
-        Ok(inner.wait()?.map(|(u, v)| (u, ACow::Owned(v))))
+
+        let res = inner.wait()?;
+
+        if let Some((u, v, took)) = res {
+            log::warn!(
+                "awaited read for {u:?} returned {} bytes in {took:?}",
+                v.len(),
+            );
+            Ok(Some((u, ACow::Owned(v))))
+        } else {
+            log::warn!("awaited read returned None");
+            Ok(None)
+        }
     }
 }

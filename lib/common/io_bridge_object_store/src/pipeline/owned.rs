@@ -45,11 +45,21 @@ where
         range: Range<u64>,
         align: usize,
     ) -> Result<()> {
+        log::warn!(
+            "schedule read of {} range {:?}",
+            self.file.path.display(),
+            range
+        );
         let future = read_into_byte_buffer::<A>(&self.file, range, align);
         self.inner.schedule(&self.file.runtime, user_data, future)
     }
 
     fn schedule_whole(&mut self, user_data: U, from: u64) -> Result<()> {
+        log::warn!(
+            "schedule_whole read of {} from {}",
+            self.file.path.display(),
+            from
+        );
         // One open-ended GET from `from` to EOF, byte-aligned, sized from the
         // response — no separate `len`/HEAD round-trip. `from == 0` reads the
         // whole object; an offset at or past EOF resolves to an empty read
@@ -59,7 +69,19 @@ where
     }
 
     fn wait(&mut self) -> Result<Option<(U, ACow<'_>)>> {
-        Ok(self.inner.wait()?.map(|(u, v)| (u, ACow::Owned(v))))
+        let res = self.inner.wait()?;
+
+        if let Some((u, v, took)) = res {
+            log::warn!(
+                "awaited read for {u:?} of {} returned {} bytes in {took:?}",
+                self.file.path.display(),
+                v.len(),
+            );
+            Ok(Some((u, ACow::Owned(v))))
+        } else {
+            log::warn!("awaited read of {} returned None", self.file.path.display());
+            Ok(None)
+        }
     }
 
     fn into_inner(self) -> BlobFile<A> {

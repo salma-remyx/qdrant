@@ -43,7 +43,10 @@ impl<A: AsyncRead + Clone> UniversalReadFileOps for BlobFs<A> {
     }
 
     fn exists(&self, path: &Path) -> Result<bool> {
-        self.runtime.block_on(self.inner.exists(path))
+        let start_time = std::time::Instant::now();
+        let result = self.runtime.block_on(self.inner.exists(path));
+        log::warn!("exists({}) took {:?}", path.display(), start_time.elapsed());
+        result
     }
 
     fn create(&self, path: &Path, _expected_length: usize) -> Result<()> {
